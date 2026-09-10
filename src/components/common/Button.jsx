@@ -1,0 +1,1 @@
+export default function Button({ children, icon: Icon, variant = 'secondary', className = '', ...props }) { return <button className={`button button--${variant} ${className}`} type="button" {...props}>{Icon && <Icon size={16} strokeWidth={1.9} aria-hidden="true" />}{children}</button> }
