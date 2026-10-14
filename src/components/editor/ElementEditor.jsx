@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { ChevronDown, ChevronUp, Copy, ImagePlus, Plus, Trash2, X } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import MathExpression from '../common/MathExpression'
 
 const chartColors = ['#2f6d62', '#7ea999', '#d29b63', '#7c88a7', '#bc7470']
 
@@ -50,7 +51,7 @@ export default function ElementEditor({ element, number, onChange, onDelete, onD
   else if (element.type === 'chart') content = <ChartEditor element={element} onChange={onChange} />
   else if (element.type === 'quote') content = <div className="quote-editor"><GrowingTextarea value={element.content} onChange={(content) => onChange({ content })} placeholder="Quotation text" ariaLabel="Quotation text" /><input value={element.source ?? ''} onChange={(event) => onChange({ source: event.target.value })} placeholder="Optional source or attribution" aria-label="Quote source" /></div>
   else if (element.type === 'code') content = <GrowingTextarea className="code-editor" value={element.content} onChange={(content) => onChange({ content })} placeholder="Write code here…" ariaLabel="Code block" />
-  else if (element.type === 'equation') content = <input className="equation-editor" value={element.content} onChange={(event) => onChange({ content: event.target.value })} placeholder="E = mc²" aria-label="Equation" />
+  else if (element.type === 'equation') content = <div className="equation-editor-wrap"><input className="equation-editor" value={element.content} onChange={(event) => onChange({ content: event.target.value })} placeholder="e.g. \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}" aria-label="Equation LaTeX source" /><MathExpression source={element.content} className="equation-editor-preview" /></div>
   else if (element.type === 'heading') content = <input className="heading-block-input" value={element.content} onChange={(event) => onChange({ content: event.target.value })} aria-label="Heading" />
   else content = <GrowingTextarea value={element.content} onChange={(content) => onChange({ content })} placeholder="Write a paragraph…" ariaLabel="Paragraph" />
   return <div className={`paper-element paper-element--${element.type}`}><ElementToolbar type={element.type} onDelete={onDelete} onDuplicate={onDuplicate} onMove={onMove} />{content}</div>

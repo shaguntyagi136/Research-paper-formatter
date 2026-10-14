@@ -1,0 +1,7 @@
+warning: in the working copy of 'package-lock.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/App.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/editor/ElementEditor.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/editor/PaperEditor.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/editor/PaperHeader.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/editor/SectionCard.jsx', LF will be replaced by CRLF the next time Git touches it

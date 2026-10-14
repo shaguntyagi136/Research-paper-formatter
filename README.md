@@ -1,16 +1,36 @@
-# React + Vite
+# ResearchPaper Builder
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A structured web-based research paper authoring and formatting tool designed to make creating IEEE-style papers easier.
 
-Currently, two official plugins are available:
+Instead of manually managing formatting, sections, references, and document layout, ResearchPaper Builder provides a structured editor with live preview and export options.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+> 🚧 Currently under active development.
 
-## React Compiler
+## ✨ Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- 📝 Structured research paper editor
+- 📑 Section and subsection management
+- 🔢 Automatic section numbering
+- 👀 IEEE-style paper preview
+- 📄 PDF export
+- 📘 Editable DOCX export *(coming soon)*
+- 📚 Structured reference management *(in development)*
+- 📊 Tables, charts, figures and other academic elements *(in development)*
+- ↕️ Section and element reordering *(in development)*
+- ⚙️ Configurable paper formatting *(in development)*
 
-## Expanding the ESLint configuration
+## 🛠️ Tech Stack
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- React
+- Vite
+- JavaScript
+- Lucide React
+- Recharts
+
+## 🚀 Getting Started
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/YOUR_USERNAME/research-paper-builder.git
+cd research-paper-builder
