@@ -32,3 +32,15 @@
 @media (max-width: 700px) { .abstract-layout-setting { align-items: flex-start; flex-direction: column; gap: 6px; }.ieee-paper-pages { gap: 16px; }.ieee-paper--page { min-height: auto; padding: 38px 27px 45px; }.ieee-page-body { grid-template-columns: 1fr; gap: 0; }.ieee-page-column:empty { display: none; }.ieee-page-number { right: 27px; bottom: 17px; } }
 @media print { .ieee-paper-pages { display: block; }.ieee-paper--page { width: 100%; min-height: 0; margin: 0; padding: 14mm 13mm; box-shadow: none; break-after: page; page-break-after: always; }.ieee-paper--page:last-child { break-after: auto; page-break-after: auto; }.ieee-page-number { right: 13mm; bottom: 8mm; }.ieee-page-body { gap: 8mm; } }
 .ieee-column-abstract-heading { margin: 0 0 3px; font-size: 11px; text-transform: uppercase; }.ieee-column-abstract-content, .ieee-column-keywords { font-size: 10px; line-height: 1.42; text-align: justify; }.ieee-column-abstract-content { margin: 0; }.ieee-column-keywords { margin: 0; font-style: italic; }.ieee-column-keywords strong { margin-right: 4px; font-style: normal; }
+#paper-print-root { position: fixed; top: 0; left: -10000px; width: 816px; visibility: hidden; pointer-events: none; z-index: -1; }
+@page { size: A4; margin: 0; }
+@media print {
+  html, body, #root { width: 210mm; margin: 0 !important; padding: 0 !important; background: #fff; }
+  #root > .app-shell { display: none !important; }
+  #paper-print-root { position: static !important; top: auto; left: auto; width: 210mm; visibility: visible !important; }
+  #paper-print-root .ieee-paper-pages { display: block; }
+  #paper-print-root .ieee-paper--page { box-sizing: border-box; width: 210mm; min-height: 297mm; margin: 0; padding: 14mm 13mm 17mm; box-shadow: none; break-after: page; page-break-after: always; }
+  #paper-print-root .ieee-paper--page:last-child { break-after: auto; page-break-after: auto; }
+  #paper-print-root .ieee-page-body { gap: 8mm; }
+  #paper-print-root .ieee-page-number { right: 13mm; bottom: 8mm; }
+}
