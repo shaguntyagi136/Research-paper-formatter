@@ -3,8 +3,13 @@ import { defaultPaper } from '../data/defaultPaper'
 const cloneDefaultPaper = () => JSON.parse(JSON.stringify(defaultPaper))
 const PAPER_STORAGE_KEY = 'research-paper-app:draft:v1'
 const SAVE_DEBOUNCE_MS = 500
+const HISTORY_LIMIT = 100
+const HISTORY_COALESCE_MS = 750
+const HISTORY_FEEDBACK_DURATION_MS = 2000
 
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
+const clonePaper = (paper) => JSON.parse(JSON.stringify(paper))
+const paperHasChanged = (current, next) => JSON.stringify(current) !== JSON.stringify(next)
 
 const normalizeAffiliation = (affiliation, index) => {
   if (typeof affiliation === 'string') return { id: `affiliation-${index + 1}`, name: affiliation }
@@ -105,12 +110,40 @@ const moveInList = (items, index, direction) => {
   const next = [...items]; const target = index + direction
   if (target < 0 || target >= next.length) return items
   ;[next[index], next[target]] = [next[target], next[index]]
-  return next
+  return next.map((item, itemIndex) => ({ ...item, order: itemIndex + 1 }))
 }
 const moveNestedSection = (sections, id, direction) => {
   const index = sections.findIndex((section) => section.id === id)
   if (index !== -1) return moveInList(sections, index, direction)
-  return sections.map((section) => ({ ...section, children: moveNestedSection(section.children ?? [], id, direction) }))
+  let changed = false
+  const next = sections.map((section) => {
+    const currentChildren = section.children ?? []
+    const children = moveNestedSection(currentChildren, id, direction)
+    if (children === currentChildren) return section
+    changed = true
+    return { ...section, children }
+  })
+  return changed ? next : sections
+}
+const reorderNestedSection = (sections, sourceId, targetId, position) => {
+  const sourceIndex = sections.findIndex((section) => section.id === sourceId)
+  const targetIndex = sections.findIndex((section) => section.id === targetId)
+  if (sourceIndex !== -1 && targetIndex !== -1 && sourceId !== targetId) {
+    const next = [...sections]
+    const [section] = next.splice(sourceIndex, 1)
+    const adjustedTargetIndex = next.findIndex((item) => item.id === targetId)
+    next.splice(adjustedTargetIndex + (position === 'after' ? 1 : 0), 0, section)
+    return next.map((item, index) => ({ ...item, order: index + 1 }))
+  }
+  let changed = false
+  const next = sections.map((section) => {
+    const currentChildren = section.children ?? []
+    const children = reorderNestedSection(currentChildren, sourceId, targetId, position)
+    if (children === currentChildren) return section
+    changed = true
+    return { ...section, children }
+  })
+  return changed ? next : sections
 }
 const defaultElement = (type) => {
   const id = createId('element')
@@ -128,11 +161,11 @@ const defaultElement = (type) => {
 export function usePaper() {
   const [paper, setPaperState] = useState(loadPaper)
   const [saveState, setSaveState] = useState('saving')
+  const [historyFeedback, setHistoryFeedback] = useState(null)
   const paperRef = useRef(paper)
-  const setPaper = (update) => {
-    setSaveState('saving')
-    setPaperState(update)
-  }
+  const historyRef = useRef({ past: [], future: [], lastGroup: null, lastUpdatedAt: 0 })
+  const historyFeedbackTimerRef = useRef(null)
+  const historyFeedbackIdRef = useRef(0)
   const savePaper = useCallback((paperToSave) => {
     try {
       window.localStorage.setItem(PAPER_STORAGE_KEY, JSON.stringify(paperToSave))
@@ -157,17 +190,101 @@ export function usePaper() {
     return () => window.removeEventListener('pagehide', flushLatestPaper)
   }, [savePaper])
 
-  const updatePaperField = (field, value) => setPaper((current) => ({ ...current, [field]: value }))
-  const updateSectionContent = (id, content) => setPaper((current) => ({ ...current, sections: updateNestedSection(current.sections, id, (section) => ({ ...section, content })) }))
-  const updateSectionTitle = (id, title) => setPaper((current) => ({ ...current, sections: updateNestedSection(current.sections, id, (section) => ({ ...section, title })) }))
-  const addSection = () => { const id = createId(); setPaper((current) => ({ ...current, sections: [...current.sections, { id, title: 'New Section', level: 1, order: current.sections.length + 1, content: '', elements: [], children: [] }] })); return id }
-  const addSubsection = (parentId) => { const id = createId(); setPaper((current) => ({ ...current, sections: updateNestedSection(current.sections, parentId, (section) => ({ ...section, children: [...(section.children ?? []), { id, title: 'New Subsection', level: (section.level ?? 1) + 1, order: (section.children ?? []).length + 1, content: '', elements: [], children: [] }] })) })); return id }
-  const deleteSection = (id) => setPaper((current) => ({ ...current, sections: removeNestedSection(current.sections, id) }))
-  const moveSection = (id, direction) => setPaper((current) => ({ ...current, sections: moveNestedSection(current.sections, id, direction) }))
-  const addElement = (sectionId, type) => { const element = defaultElement(type); setPaper((current) => ({ ...current, sections: updateNestedSection(current.sections, sectionId, (section) => ({ ...section, elements: [...(section.elements ?? []), { ...element, order: (section.elements ?? []).length + 1 }] })) })); return element.id }
-  const updateElement = (sectionId, elementId, update) => setPaper((current) => ({ ...current, sections: updateNestedSection(current.sections, sectionId, (section) => ({ ...section, elements: (section.elements ?? []).map((element) => element.id === elementId ? { ...element, ...update } : element) })) }))
-  const deleteElement = (sectionId, elementId) => setPaper((current) => ({ ...current, sections: updateNestedSection(current.sections, sectionId, (section) => ({ ...section, elements: (section.elements ?? []).filter((element) => element.id !== elementId) })) }))
-  const duplicateElement = (sectionId, elementId) => setPaper((current) => ({ ...current, sections: updateNestedSection(current.sections, sectionId, (section) => { const item = (section.elements ?? []).find((element) => element.id === elementId); return item ? { ...section, elements: [...section.elements, { ...JSON.parse(JSON.stringify(item)), id: createId('element'), order: section.elements.length + 1 }] } : section }) }))
-  const moveElement = (sectionId, elementId, direction) => setPaper((current) => ({ ...current, sections: updateNestedSection(current.sections, sectionId, (section) => { const index = (section.elements ?? []).findIndex((element) => element.id === elementId); return index < 0 ? section : { ...section, elements: moveInList(section.elements, index, direction).map((element, order) => ({ ...element, order })) } }) }))
-  return { paper, saveState, updatePaperField, updateSectionContent, updateSectionTitle, addSection, addSubsection, deleteSection, moveSection, addElement, updateElement, deleteElement, duplicateElement, moveElement }
+  useEffect(() => () => window.clearTimeout(historyFeedbackTimerRef.current), [])
+
+  const showHistoryFeedback = useCallback((message) => {
+    const id = ++historyFeedbackIdRef.current
+    window.clearTimeout(historyFeedbackTimerRef.current)
+    setHistoryFeedback({ id, message })
+    historyFeedbackTimerRef.current = window.setTimeout(() => {
+      setHistoryFeedback((current) => current?.id === id ? null : current)
+    }, HISTORY_FEEDBACK_DURATION_MS)
+  }, [])
+
+  const applyPaperChange = useCallback((update, { group = null, coalesce = false } = {}) => {
+    const current = paperRef.current
+    const next = typeof update === 'function' ? update(current) : update
+    if (!paperHasChanged(current, next)) return false
+    const history = historyRef.current
+    const now = Date.now()
+    const mergeWithPrevious = coalesce && group === history.lastGroup && now - history.lastUpdatedAt < HISTORY_COALESCE_MS
+    if (!mergeWithPrevious) {
+      history.past.push(clonePaper(current))
+      if (history.past.length > HISTORY_LIMIT) history.past.shift()
+    }
+    history.future = []
+    history.lastGroup = coalesce ? group : null
+    history.lastUpdatedAt = now
+    paperRef.current = next
+    setSaveState('saving')
+    setPaperState(next)
+    return true
+  }, [])
+
+  const undo = useCallback(() => {
+    const history = historyRef.current
+    const previous = history.past.pop()
+    if (!previous) return false
+    history.future.unshift(clonePaper(paperRef.current))
+    if (history.future.length > HISTORY_LIMIT) history.future.pop()
+    history.lastGroup = null
+    history.lastUpdatedAt = 0
+    paperRef.current = previous
+    setSaveState('saving')
+    setPaperState(previous)
+    showHistoryFeedback('Undo successful')
+    return true
+  }, [showHistoryFeedback])
+
+  const redo = useCallback(() => {
+    const history = historyRef.current
+    const next = history.future.shift()
+    if (!next) return false
+    history.past.push(clonePaper(paperRef.current))
+    if (history.past.length > HISTORY_LIMIT) history.past.shift()
+    history.lastGroup = null
+    history.lastUpdatedAt = 0
+    paperRef.current = next
+    setSaveState('saving')
+    setPaperState(next)
+    showHistoryFeedback('Redo successful')
+    return true
+  }, [showHistoryFeedback])
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      const target = event.target
+      const isEditingText = target instanceof Element && (target.matches('input, textarea, select') || target.closest('[contenteditable="true"]'))
+      if (isEditingText || (!event.ctrlKey && !event.metaKey) || event.altKey) return
+      const key = event.key.toLowerCase()
+      if (key === 'z') {
+        event.preventDefault()
+        if (event.shiftKey) redo()
+        else undo()
+      } else if (key === 'y') {
+        event.preventDefault()
+        redo()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [redo, undo])
+
+  const updatePaperField = (field, value) => {
+    if (typeof field === 'function') return applyPaperChange(field)
+    return applyPaperChange((current) => ({ ...current, [field]: value }), { group: `paper:${field}`, coalesce: true })
+  }
+  const updateSectionContent = (id, content) => applyPaperChange((current) => ({ ...current, sections: updateNestedSection(current.sections, id, (section) => ({ ...section, content })) }), { group: `section-content:${id}`, coalesce: true })
+  const updateSectionTitle = (id, title) => applyPaperChange((current) => ({ ...current, sections: updateNestedSection(current.sections, id, (section) => ({ ...section, title })) }), { group: `section-title:${id}`, coalesce: true })
+  const addSection = () => { const id = createId(); applyPaperChange((current) => ({ ...current, sections: [...current.sections, { id, title: 'New Section', level: 1, order: current.sections.length + 1, content: '', elements: [], children: [] }] })); return id }
+  const addSubsection = (parentId) => { const id = createId(); applyPaperChange((current) => ({ ...current, sections: updateNestedSection(current.sections, parentId, (section) => ({ ...section, children: [...(section.children ?? []), { id, title: 'New Subsection', level: (section.level ?? 1) + 1, order: (section.children ?? []).length + 1, content: '', elements: [], children: [] }] })) })); return id }
+  const deleteSection = (id) => applyPaperChange((current) => ({ ...current, sections: removeNestedSection(current.sections, id) }))
+  const moveSection = (id, direction) => applyPaperChange((current) => ({ ...current, sections: moveNestedSection(current.sections, id, direction) }))
+  const reorderSection = (sourceId, targetId, position) => applyPaperChange((current) => ({ ...current, sections: reorderNestedSection(current.sections, sourceId, targetId, position) }))
+  const addElement = (sectionId, type) => { const element = defaultElement(type); applyPaperChange((current) => ({ ...current, sections: updateNestedSection(current.sections, sectionId, (section) => ({ ...section, elements: [...(section.elements ?? []), { ...element, order: (section.elements ?? []).length + 1 }] })) })); return element.id }
+  const updateElement = (sectionId, elementId, update) => applyPaperChange((current) => ({ ...current, sections: updateNestedSection(current.sections, sectionId, (section) => ({ ...section, elements: (section.elements ?? []).map((element) => element.id === elementId ? { ...element, ...update } : element) })) }), { group: `element:${sectionId}:${elementId}`, coalesce: true })
+  const deleteElement = (sectionId, elementId) => applyPaperChange((current) => ({ ...current, sections: updateNestedSection(current.sections, sectionId, (section) => ({ ...section, elements: (section.elements ?? []).filter((element) => element.id !== elementId) })) }))
+  const duplicateElement = (sectionId, elementId) => applyPaperChange((current) => ({ ...current, sections: updateNestedSection(current.sections, sectionId, (section) => { const item = (section.elements ?? []).find((element) => element.id === elementId); return item ? { ...section, elements: [...section.elements, { ...clonePaper(item), id: createId('element'), order: section.elements.length + 1 }] } : section }) }))
+  const moveElement = (sectionId, elementId, direction) => applyPaperChange((current) => ({ ...current, sections: updateNestedSection(current.sections, sectionId, (section) => { const index = (section.elements ?? []).findIndex((element) => element.id === elementId); return index < 0 ? section : { ...section, elements: moveInList(section.elements, index, direction).map((element, order) => ({ ...element, order })) } }) }))
+  return { paper, saveState, historyFeedback, undo, redo, updatePaperField, updateSectionContent, updateSectionTitle, addSection, addSubsection, deleteSection, moveSection, reorderSection, addElement, updateElement, deleteElement, duplicateElement, moveElement }
 }

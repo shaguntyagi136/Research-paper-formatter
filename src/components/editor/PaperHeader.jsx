@@ -3,16 +3,16 @@ const createId = (prefix) => `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `
 
 export default function PaperHeader({ paper, onUpdatePaper, selected }) {
   const keywords = paper.keywords.join(', ')
-  const abstractLayout = paper.abstractLayout ?? 'full-width'
   const updateAuthor = (id, update) => onUpdatePaper('authors', paper.authors.map((author) => author.id === id ? { ...author, ...update } : author))
   const updateAffiliation = (id, name) => onUpdatePaper('affiliations', paper.affiliations.map((affiliation) => affiliation.id === id ? { ...affiliation, name } : affiliation))
   const addAuthor = () => onUpdatePaper('authors', [...paper.authors, { id: createId('author'), name: '', affiliationIds: paper.affiliations[0] ? [paper.affiliations[0].id] : [] }])
   const removeAuthor = (id) => onUpdatePaper('authors', paper.authors.filter((author) => author.id !== id))
   const addAffiliation = () => onUpdatePaper('affiliations', [...paper.affiliations, { id: createId('affiliation'), name: '' }])
-  const removeAffiliation = (id) => {
-    onUpdatePaper('affiliations', paper.affiliations.filter((affiliation) => affiliation.id !== id))
-    onUpdatePaper('authors', paper.authors.map((author) => ({ ...author, affiliationIds: author.affiliationIds.filter((affiliationId) => affiliationId !== id) })))
-  }
+  const removeAffiliation = (id) => onUpdatePaper((current) => ({
+    ...current,
+    affiliations: current.affiliations.filter((affiliation) => affiliation.id !== id),
+    authors: current.authors.map((author) => ({ ...author, affiliationIds: author.affiliationIds.filter((affiliationId) => affiliationId !== id) })),
+  }))
   const toggleAuthorAffiliation = (author, affiliationId) => {
     const affiliationIds = author.affiliationIds.includes(affiliationId)
       ? author.affiliationIds.filter((id) => id !== affiliationId)
@@ -29,6 +29,7 @@ export default function PaperHeader({ paper, onUpdatePaper, selected }) {
         {paper.authors.map((author, index) => <div className="metadata-entry" key={author.id}>
           <div className="metadata-entry-heading"><span>Author {index + 1}</span><button type="button" onClick={() => removeAuthor(author.id)} aria-label={`Remove author ${index + 1}`}>Remove</button></div>
           <input value={author.name} onChange={(event) => updateAuthor(author.id, { name: event.target.value })} placeholder="Author name" aria-label={`Author ${index + 1} name`} />
+          <input type="email" value={author.email ?? ''} onChange={(event) => updateAuthor(author.id, { email: event.target.value })} placeholder="Email address (optional)" aria-label={`Author ${index + 1} email`} />
           <div className="author-affiliations" role="group" aria-label={`Affiliations for author ${index + 1}`}>
             <span>Affiliations</span>
             {paper.affiliations.length
@@ -45,7 +46,21 @@ export default function PaperHeader({ paper, onUpdatePaper, selected }) {
         </div>)}
       </section>
     </div>
-    <div className="abstract-layout-setting"><span>Abstract layout</span><div role="group" aria-label="Abstract layout"><button type="button" className={abstractLayout === 'full-width' ? 'is-active' : ''} onClick={() => onUpdatePaper('abstractLayout', 'full-width')}>Full width</button><button type="button" className={abstractLayout === 'two-columns' ? 'is-active' : ''} onClick={() => onUpdatePaper('abstractLayout', 'two-columns')}>Two columns</button></div></div>
+    <div className="abstract-layout-field">
+      <label htmlFor="abstract-layout">Abstract layout</label>
+      <select
+        id="abstract-layout"
+        value={paper.abstractLayout ?? 'two-columns'}
+        onChange={(event) => onUpdatePaper('abstractLayout', event.target.value)}
+        aria-describedby="abstract-layout-help"
+      >
+        <option value="full-width">Full width</option>
+        <option value="two-columns">Two columns</option>
+      </select>
+      <small id="abstract-layout-help">
+        Full width places the abstract and Index Terms above both columns; Two columns flows them within the columns.
+      </small>
+    </div>
     <EditableContent label="Abstract" value={paper.abstract} onChange={(value) => onUpdatePaper('abstract', value)} placeholder="Write a concise summary of your research, methods, findings, and contribution." className="abstract-field" />
     <label className="keywords-field"><span>Keywords</span><input value={keywords} onChange={(event) => onUpdatePaper('keywords', event.target.value.split(',').map((keyword) => keyword.trim()).filter(Boolean))} placeholder="e.g. research, methodology, analysis" /></label>
   </section>

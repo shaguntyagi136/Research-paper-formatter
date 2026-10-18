@@ -216,7 +216,7 @@ export async function exportPaperToPdf(paper) {
   const keywords = nonEmpty(paper.keywords ?? [])
   const fullWidth = pageSize.width - margin * 2
   let headerY = 54
-  const fullWidthAbstract = (paper.abstractLayout ?? 'full-width') === 'full-width'
+  const fullWidthAbstract = (paper.abstractLayout ?? 'two-columns') === 'full-width'
   doc.setTextColor(20, 29, 34)
   doc.setFont('times', 'bold')
   doc.setFontSize(17)

@@ -16,7 +16,12 @@ export const getPaperMetadata = (paper) => {
       const affiliationNumbers = ids
         .map((id) => affiliations.find((affiliation) => affiliation.id === id)?.number)
         .filter((number) => number !== undefined)
-      return { id: typeof author === 'string' ? `author-${index + 1}` : author.id, name, affiliationNumbers }
+      return {
+        id: typeof author === 'string' ? `author-${index + 1}` : author.id,
+        name,
+        email: typeof author === 'string' || typeof author.email !== 'string' ? '' : author.email,
+        affiliationNumbers,
+      }
     })
     .filter((author) => author.name?.trim())
 

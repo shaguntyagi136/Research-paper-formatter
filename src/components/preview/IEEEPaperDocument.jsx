@@ -1,14 +1,12 @@
+import { useLayoutEffect, useRef, useState } from 'react'
 import { sectionHeading, toRoman } from '../../utils/sectionLabels'
 import { flattenSections, getElementNumbering, nonEmpty, sectionElements } from '../../utils/paperStructure'
 import { getPaperMetadata } from '../../utils/paperMetadata'
 import { ChartGraphic } from '../editor/ElementEditor'
 import MathExpression from '../common/MathExpression'
 
-const splitParagraph = (content, maxLength = 280) => String(content ?? '').split(/\n+/).filter(Boolean).flatMap((paragraph) => {
-  const words = paragraph.trim().split(/\s+/); const chunks = []; let chunk = ''
-  words.forEach((word) => { const candidate = `${chunk} ${word}`.trim(); if (candidate.length > maxLength && chunk) { chunks.push(chunk); chunk = word } else chunk = candidate })
-  if (chunk) chunks.push(chunk); return chunks
-})
+const LETTER_BODY_HEIGHT = 888
+
 function Paragraph({ content }) { return <p className="ieee-paragraph">{content}</p> }
 function Figure({ element, number }) { return <figure className="ieee-figure">{element.imageUrl ? <img src={element.imageUrl} alt={element.alt ?? element.caption ?? 'Paper figure'} /> : <div className="ieee-figure-placeholder">Figure</div>}<figcaption>Fig. {number}. {element.caption || 'Figure caption'}</figcaption></figure> }
 function Table({ element, number }) { const headers = element.headers ?? []; const rows = element.rows ?? []; return <figure className="ieee-table-wrap"><figcaption>TABLE {toRoman(number)}<span>{element.caption || 'Table caption'}</span></figcaption><table className="ieee-table"><thead>{headers.length > 0 && <tr>{headers.map((header, index) => <th key={`${header}-${index}`}>{header}</th>)}</tr>}</thead><tbody>{rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table></figure> }
@@ -24,7 +22,8 @@ function PaperElement({ element, numbers }) {
   return <Paragraph content={element.content ?? ''} />
 }
 const elementHeight = (element) => {
-  if (element.type === 'figure' || element.type === 'chart') return 245
+  if (element.type === 'chart') return 210
+  if (element.type === 'figure') return 245
   if (element.type === 'table') return 72 + (element.rows?.length ?? 0) * 31
   if (element.type === 'code') return 60 + String(element.content ?? '').split('\n').length * 15
   if (element.type === 'bullet-list' || element.type === 'numbered-list') return 22 + (element.items?.length ?? 0) * 28
@@ -34,28 +33,25 @@ const elementHeight = (element) => {
   return 76
 }
 function documentBlocks(paper) {
-  const blocks = []
-  if ((paper.abstractLayout ?? 'full-width') === 'two-columns') {
-    blocks.push({ id: 'abstract-heading', type: 'abstract-heading', height: 20 })
-    splitParagraph(paper.abstract || 'No abstract has been added to this paper yet.', 58).forEach((content, index) => blocks.push({ id: `abstract-${index}`, type: 'abstract-content', content, height: 18 }))
-    if (paper.keywords?.length) splitParagraph(paper.keywords.join(', '), 58).forEach((content, index) => blocks.push({ id: `keywords-${index}`, type: 'keywords', content, showLabel: index === 0, height: 18 }))
+  const abstractBlocks = []
+  const bodyBlocks = []
+  if ((paper.abstractLayout ?? 'two-columns') === 'two-columns') {
+    abstractBlocks.push({ id: 'abstract', type: 'abstract-content', content: paper.abstract || 'No abstract has been added to this paper yet.', showHeading: true })
+    if (paper.keywords?.length) {
+      abstractBlocks.push({ id: 'keywords', type: 'keywords', content: paper.keywords.join(', '), showLabel: true })
+    }
   }
-  flattenSections(paper.sections).forEach(({ section, path }) => { blocks.push({ id: `${section.id}-heading`, type: 'section', path, section, height: path.length === 1 ? 28 : 24 }); sectionElements(section).forEach((element, index) => { if (element.type === 'paragraph') splitParagraph(element.content).forEach((content, paragraphIndex) => blocks.push({ id: `${element.id ?? section.id}-${index}-${paragraphIndex}`, type: 'element', element: { ...element, content }, height: 76 })); else blocks.push({ id: element.id ?? `${section.id}-${index}`, type: 'element', element, height: elementHeight(element) }) }) })
-  if (paper.references.length) { blocks.push({ id: 'references-heading', type: 'references-heading', height: 28 }); paper.references.forEach((reference, index) => splitParagraph(reference, 245).forEach((content, part) => blocks.push({ id: `reference-${index}-${part}`, type: 'reference', index, content, height: 65 }))) }
-  return blocks
+  flattenSections(paper.sections).forEach(({ section, path }) => { bodyBlocks.push({ id: `${section.id}-heading`, type: 'section', path, section }); sectionElements(section).forEach((element, index) => bodyBlocks.push({ id: element.id ?? `${section.id}-${index}`, type: 'element', element })) })
+  if (paper.references.length) { bodyBlocks.push({ id: 'references-heading', type: 'references-heading' }); paper.references.forEach((reference, index) => bodyBlocks.push({ id: `reference-${index}`, type: 'reference', index, content: reference })) }
+  return { abstractBlocks, bodyBlocks }
 }
-function estimateFirstPageHeaderHeight(paper, authors, affiliations, keywords, fullWidthAbstract) {
-  const lines = (value, charactersPerLine) => Math.max(1, Math.ceil(String(value ?? '').length / charactersPerLine))
-  let height = lines(paper.title || 'Untitled Research Paper', 55) * 29 + 11
-  if (authors.length) height += lines(authors.map((author) => author.name).join(', '), 100) * 18
-  if (affiliations.length) height += lines(affiliations.map((affiliation) => affiliation.name).join(' '), 120) * 14 + 17
-  if (fullWidthAbstract) {
-    height += 17 + lines(paper.abstract || 'No abstract has been added to this paper yet.', 120) * 15 + 7
-    if (keywords.length) height += lines(keywords.join(', '), 120) * 15 + 7
-  }
-  return height + 20
+function fallbackHeight(block) {
+  if (block.type === 'section' || block.type === 'references-heading') return block.path?.length === 1 ? 30 : 26
+  if (block.type === 'abstract-content' || block.type === 'keywords') return Math.max(20, Math.ceil(block.content.length / 42) * 14 + 4)
+  if (block.type === 'reference') return Math.max(18, Math.ceil(block.content.length / 60) * 12 + 5)
+  return elementHeight(block.element)
 }
-function paginate(blocks, firstCapacity) {
+function paginate(abstractBlocks, bodyBlocks, firstCapacity, heights = {}) {
   const pages = []
   let page = [[], []]
   let column = 0
@@ -63,24 +59,67 @@ function paginate(blocks, firstCapacity) {
   let capacity = firstCapacity
   const nextColumn = () => {
     if (column === 0) { column = 1; used = 0 }
-    else { pages.push(page); page = [[], []]; column = 0; used = 0; capacity = 850 }
+    else { pages.push(page); page = [[], []]; column = 0; used = 0; capacity = LETTER_BODY_HEIGHT }
   }
-  if (blocks.length && blocks[0].height > firstCapacity) {
-    pages.push(page)
-    page = [[], []]
-    capacity = 850
-  }
-  blocks.forEach((block, index) => {
-    const nextBlock = blocks[index + 1]
+  const place = (block, nextBlock) => {
+    const height = heights[block.id] ?? fallbackHeight(block)
     const keepWithNext = block.type === 'section' || block.type === 'references-heading'
-    const requiredHeight = block.height + (keepWithNext ? nextBlock?.height ?? 0 : 0)
+    const requiredHeight = height + (keepWithNext && nextBlock ? heights[nextBlock.id] ?? fallbackHeight(nextBlock) : 0)
     if (used + requiredHeight > capacity && page[column].length) nextColumn()
     page[column].push(block)
-    used += block.height
-  })
+    used += height
+  }
+  abstractBlocks.forEach((block, index) => place(block, abstractBlocks[index + 1]))
+  // If the two-column abstract reached the right column, reserve that page for
+  // its preamble. Starting body content on the next page preserves reading order.
+  if (abstractBlocks.length && column === 1 && page[1].length) nextColumn()
+  bodyBlocks.forEach((block, index) => place(block, bodyBlocks[index + 1]))
   if (page[0].length || page[1].length) pages.push(page)
   return pages
 }
-function RenderBlock({ block, numbers }) { if (block.type === 'section') return <h2 className={`ieee-page-section-heading ieee-page-section-heading--level-${block.path.length}`}>{sectionHeading(block.section, block.path)}</h2>; if (block.type === 'abstract-heading') return <h2 className="ieee-column-abstract-heading">Abstract</h2>; if (block.type === 'abstract-content') return <div className="ieee-column-abstract-content">{block.content}</div>; if (block.type === 'keywords') return <div className="ieee-column-keywords">{block.showLabel && <strong>Index Terms—</strong>}{block.content}</div>; if (block.type === 'references-heading') return <h2 className="ieee-page-section-heading">References</h2>; if (block.type === 'reference') return <p className="ieee-reference"><span>[{block.index + 1}]</span>{block.content}</p>; return <PaperElement element={block.element} numbers={numbers} /> }
-function PageHeader({ paper, authors, affiliations, keywords, fullWidthAbstract }) { return <header className="ieee-title-block"><h1>{paper.title || 'Untitled Research Paper'}</h1>{authors.length > 0 && <p className="ieee-authors">{authors.map((author, index) => <span key={author.id}>{index > 0 && ', '}{author.name}{author.affiliationNumbers.length > 0 && <sup>{author.affiliationNumbers.join(',')}</sup>}</span>)}</p>}{affiliations.length > 0 && <p className="ieee-affiliations">{affiliations.map((affiliation) => <span key={affiliation.id}><sup>{affiliation.number}</sup> {affiliation.name}</span>)}</p>}{fullWidthAbstract && <><div className="ieee-abstract"><h2>Abstract</h2><p>{paper.abstract || 'No abstract has been added to this paper yet.'}</p></div>{keywords.length > 0 && <p className="ieee-keywords"><strong>Index Terms—</strong>{keywords.join(', ')}</p>}</>}</header> }
-export default function IEEEPaperDocument({ paper, id, className = '' }) { const { authors, affiliations } = getPaperMetadata(paper); const keywords = nonEmpty(paper.keywords ?? []); const numbers = getElementNumbering(paper); const fullWidthAbstract = (paper.abstractLayout ?? 'full-width') === 'full-width'; const firstPageCapacity = Math.max(0, 930 - estimateFirstPageHeaderHeight(paper, authors, affiliations, keywords, fullWidthAbstract)); const pages = paginate(documentBlocks(paper), firstPageCapacity); return <div id={id} className={`ieee-paper-pages ${className}`} aria-label="IEEE paper preview">{pages.map((columns, pageIndex) => <article className={`ieee-paper ieee-paper--page ${pageIndex === 0 ? 'ieee-paper--first-page' : ''}`} key={pageIndex} aria-label={`Page ${pageIndex + 1}`}>{pageIndex === 0 && <PageHeader paper={paper} authors={authors} affiliations={affiliations} keywords={keywords} fullWidthAbstract={fullWidthAbstract} />}<div className="ieee-page-body">{columns.map((column, columnIndex) => <div className="ieee-page-column" key={columnIndex}>{column.map((block) => <RenderBlock block={block} numbers={numbers} key={block.id} />)}</div>)}</div><span className="ieee-page-number">{pageIndex + 1}</span></article>)}</div> }
+function RenderBlock({ block, numbers, measure = false }) { const content = block.type === 'section' ? <h2 className={`ieee-page-section-heading ieee-page-section-heading--level-${block.path.length}`}>{sectionHeading(block.section, block.path)}</h2> : block.type === 'abstract-content' ? <p className="ieee-column-abstract-content">{block.showHeading && <strong>Abstract—</strong>}{block.content}</p> : block.type === 'keywords' ? <p className="ieee-column-keywords">{block.showLabel && <strong>Index Terms—</strong>}{block.content}</p> : block.type === 'references-heading' ? <h2 className="ieee-page-section-heading">References</h2> : block.type === 'reference' ? <p className="ieee-reference"><span>[{block.index + 1}]</span>{block.content}</p> : <PaperElement element={block.element} numbers={numbers} />; return <div className="ieee-page-block" data-block-id={measure ? block.id : undefined}>{content}</div> }
+function PageHeader({ paper, authors, affiliations, keywords, measure = false }) {
+  const fullWidthAbstract = (paper.abstractLayout ?? 'two-columns') === 'full-width'
+  return <header className="ieee-title-block" data-measure-header={measure || undefined}>
+    <h1>{paper.title || 'Untitled Research Paper'}</h1>
+    {authors.length > 0 && <div className="ieee-author-grid" aria-label="Authors">{authors.map((author) => {
+      const authorAffiliations = author.affiliationNumbers.map((number) => affiliations.find((affiliation) => affiliation.number === number)).filter(Boolean)
+      return <section className="ieee-author-block" key={author.id}>
+        <div className="ieee-author-name">{author.name}</div>
+        {authorAffiliations.map((affiliation) => <div className="ieee-author-affiliation" key={affiliation.id}>{affiliation.name}</div>)}
+        {author.email.trim() && <div className="ieee-author-email">{author.email}</div>}
+      </section>
+    })}</div>}
+    {fullWidthAbstract && <div className="ieee-abstract-block">
+      <div className="ieee-abstract"><h2>Abstract</h2><p>{paper.abstract || 'No abstract has been added to this paper yet.'}</p></div>
+      {keywords.length > 0 && <p className="ieee-keywords"><strong>Index Terms—</strong>{keywords.join(', ')}</p>}
+    </div>}
+  </header>
+}
+export default function IEEEPaperDocument({ paper, id, className = '' }) {
+  const { authors, affiliations } = getPaperMetadata(paper)
+  const keywords = nonEmpty(paper.keywords ?? [])
+  const numbers = getElementNumbering(paper)
+  const { abstractBlocks, bodyBlocks } = documentBlocks(paper)
+  const measureRef = useRef(null)
+  const [measurements, setMeasurements] = useState({ headerHeight: 0, blockHeights: {} })
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const root = measureRef.current
+      if (!root) return
+      const header = root.querySelector('[data-measure-header]')
+      const blockHeights = Object.fromEntries([...root.querySelectorAll('[data-block-id]')].map((node) => [node.dataset.blockId, Math.ceil(node.getBoundingClientRect().height)]))
+      const headerStyle = header ? window.getComputedStyle(header) : null
+      const headerHeight = header ? Math.ceil(header.getBoundingClientRect().height + Number.parseFloat(headerStyle.marginBottom || 0)) : 0
+      setMeasurements((current) => JSON.stringify(current.blockHeights) === JSON.stringify(blockHeights) && current.headerHeight === headerHeight ? current : { headerHeight, blockHeights })
+    }
+    const frame = requestAnimationFrame(measure)
+    return () => cancelAnimationFrame(frame)
+  }, [paper, abstractBlocks.length, bodyBlocks.length])
+
+  const firstPageCapacity = Math.max(0, LETTER_BODY_HEIGHT - measurements.headerHeight)
+  const pages = paginate(abstractBlocks, bodyBlocks, firstPageCapacity || LETTER_BODY_HEIGHT, measurements.blockHeights)
+  const allBlocks = [...abstractBlocks, ...bodyBlocks]
+  return <><div id={id} className={`ieee-paper-pages ${className}`} aria-label="IEEE paper preview">{pages.map((columns, pageIndex) => <article className={`ieee-paper ieee-paper--page ${pageIndex === 0 ? 'ieee-paper--first-page' : ''}`} key={pageIndex} aria-label={`Page ${pageIndex + 1}`}>{pageIndex === 0 && <PageHeader paper={paper} authors={authors} affiliations={affiliations} keywords={keywords} />}<div className="ieee-page-body">{columns.map((column, columnIndex) => <div className="ieee-page-column" key={columnIndex}>{column.map((block) => <RenderBlock block={block} numbers={numbers} key={block.id} />)}</div>)}</div></article>)}</div><div className="ieee-pagination-measure" ref={measureRef} aria-hidden="true"><PageHeader paper={paper} authors={authors} affiliations={affiliations} keywords={keywords} measure /><div className="ieee-page-column">{allBlocks.map((block) => <RenderBlock block={block} numbers={numbers} measure key={block.id} />)}</div></div></>
+}
