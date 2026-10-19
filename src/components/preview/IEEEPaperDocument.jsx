@@ -70,14 +70,11 @@ function paginate(abstractBlocks, bodyBlocks, firstCapacity, heights = {}) {
     used += height
   }
   abstractBlocks.forEach((block, index) => place(block, abstractBlocks[index + 1]))
-  // If the two-column abstract reached the right column, reserve that page for
-  // its preamble. Starting body content on the next page preserves reading order.
-  if (abstractBlocks.length && column === 1 && page[1].length) nextColumn()
   bodyBlocks.forEach((block, index) => place(block, bodyBlocks[index + 1]))
   if (page[0].length || page[1].length) pages.push(page)
   return pages
 }
-function RenderBlock({ block, numbers, measure = false }) { const content = block.type === 'section' ? <h2 className={`ieee-page-section-heading ieee-page-section-heading--level-${block.path.length}`}>{sectionHeading(block.section, block.path)}</h2> : block.type === 'abstract-content' ? <p className="ieee-column-abstract-content">{block.showHeading && <strong>Abstract—</strong>}{block.content}</p> : block.type === 'keywords' ? <p className="ieee-column-keywords">{block.showLabel && <strong>Index Terms—</strong>}{block.content}</p> : block.type === 'references-heading' ? <h2 className="ieee-page-section-heading">References</h2> : block.type === 'reference' ? <p className="ieee-reference"><span>[{block.index + 1}]</span>{block.content}</p> : <PaperElement element={block.element} numbers={numbers} />; return <div className="ieee-page-block" data-block-id={measure ? block.id : undefined}>{content}</div> }
+function RenderBlock({ block, numbers, measure = false }) { const content = block.type === 'section' ? <h2 className={`ieee-page-section-heading ieee-page-section-heading--level-${block.path.length}`}>{block.path.length === 1 ? sectionHeading(block.section, block.path).toUpperCase() : sectionHeading(block.section, block.path)}</h2> : block.type === 'abstract-content' ? <p className="ieee-column-abstract-content">{block.showHeading && <strong>Abstract—</strong>}{block.content}</p> : block.type === 'keywords' ? <p className="ieee-column-keywords">{block.showLabel && <strong>Index Terms—</strong>}{block.content}</p> : block.type === 'references-heading' ? <h2 className="ieee-page-section-heading">References</h2> : block.type === 'reference' ? <p className="ieee-reference"><span>[{block.index + 1}]</span>{block.content}</p> : <PaperElement element={block.element} numbers={numbers} />; return <div className="ieee-page-block" data-block-id={measure ? block.id : undefined}>{content}</div> }
 function PageHeader({ paper, authors, affiliations, keywords, measure = false }) {
   const fullWidthAbstract = (paper.abstractLayout ?? 'two-columns') === 'full-width'
   return <header className="ieee-title-block" data-measure-header={measure || undefined}>

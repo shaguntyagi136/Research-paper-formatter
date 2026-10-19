@@ -8,12 +8,15 @@ import IEEEPaperDocument from './components/preview/IEEEPaperDocument'
 import HistoryToast from './components/common/HistoryToast'
 import { usePaper } from './hooks/usePaper'
 import { flattenSections } from './utils/paperStructure'
+import { exportPaperToWord } from './utils/exportPaperToWord'
 import './index.css'
 
 function App() {
   const { paper, saveState, historyFeedback, undo, redo, addSection, updatePaperField, updateSectionContent, updateSectionTitle, addSubsection, deleteSection, moveSection, reorderSection, addElement, updateElement, deleteElement, duplicateElement, moveElement } = usePaper()
   const [selectedId, setSelectedId] = useState('paper-header')
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [isWordExporting, setIsWordExporting] = useState(false)
+  const [exportFeedback, setExportFeedback] = useState(null)
   const [draggedSectionId, setDraggedSectionId] = useState(null)
   const [dropTarget, setDropTarget] = useState(null)
   const statistics = useMemo(() => {
@@ -67,9 +70,21 @@ function App() {
   }
   const sectionDragProps = { draggedSectionId, dropTarget, onSectionDragStart: handleSectionDragStart, onSectionDragEnd: handleSectionDragEnd, onSectionDragOver: handleSectionDragOver, onSectionDrop: handleSectionDrop }
   const handleExport = () => window.print()
+  const handleWordExport = async () => {
+    setIsWordExporting(true)
+    setExportFeedback(null)
+    try {
+      await exportPaperToWord(paper)
+      setExportFeedback({ id: Date.now(), message: 'Word document exported.' })
+    } catch {
+      setExportFeedback({ id: Date.now(), message: 'Word export failed. Please try again.' })
+    } finally {
+      setIsWordExporting(false)
+    }
+  }
   return <>
-    <div className="app-shell"><Header template={paper.template} saveState={saveState} onUndo={undo} onRedo={redo} onPreview={() => setIsPreviewOpen(true)} onExport={handleExport} isExporting={false} /><div className="workspace"><Sidebar paper={paper} selectedId={selectedId} onSelect={handleSelect} onAddSection={handleAddSection} {...sectionDragProps} /><main className="editor-area" aria-label="Research paper editor"><PaperEditor paper={paper} selectedId={selectedId} onSelect={setSelectedId} onUpdatePaper={updatePaperField} onUpdateSection={updateSectionContent} onUpdateSectionTitle={updateSectionTitle} sectionDragProps={sectionDragProps} actions={{ addSubsection, deleteSection, moveSection, reorderSection, addElement, updateElement, deleteElement, duplicateElement, moveElement }} /></main><ToolsPanel paper={paper} statistics={statistics} onAddSection={handleAddSection} onAddElement={handleQuickElement} onPreview={() => setIsPreviewOpen(true)} onExport={handleExport} isExporting={false} /></div>{isPreviewOpen && <PreviewModal paper={paper} onClose={() => setIsPreviewOpen(false)} onExport={handleExport} isExporting={false} />}</div>
-    <HistoryToast feedback={historyFeedback} />
+    <div className="app-shell"><Header template={paper.template} saveState={saveState} onUndo={undo} onRedo={redo} onPreview={() => setIsPreviewOpen(true)} onExport={handleExport} onExportWord={handleWordExport} isExporting={false} isWordExporting={isWordExporting} /><div className="workspace"><Sidebar paper={paper} selectedId={selectedId} onSelect={handleSelect} onAddSection={handleAddSection} {...sectionDragProps} /><main className="editor-area" aria-label="Research paper editor"><PaperEditor paper={paper} selectedId={selectedId} onSelect={setSelectedId} onUpdatePaper={updatePaperField} onUpdateSection={updateSectionContent} onUpdateSectionTitle={updateSectionTitle} sectionDragProps={sectionDragProps} actions={{ addSubsection, deleteSection, moveSection, reorderSection, addElement, updateElement, deleteElement, duplicateElement, moveElement }} /></main><ToolsPanel paper={paper} statistics={statistics} onAddSection={handleAddSection} onAddElement={handleQuickElement} onPreview={() => setIsPreviewOpen(true)} onExport={handleExport} onExportWord={handleWordExport} isExporting={false} isWordExporting={isWordExporting} /></div>{isPreviewOpen && <PreviewModal paper={paper} onClose={() => setIsPreviewOpen(false)} onExport={handleExport} onExportWord={handleWordExport} isExporting={false} isWordExporting={isWordExporting} />}</div>
+    <HistoryToast feedback={exportFeedback ?? historyFeedback} />
     <div id="paper-print-root" aria-hidden="true"><IEEEPaperDocument paper={paper} className="print-paper" /></div>
   </>
 }

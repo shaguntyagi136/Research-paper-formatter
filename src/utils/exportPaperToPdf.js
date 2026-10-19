@@ -6,11 +6,11 @@ import { latexToPdfText } from './latexToPdfText'
 import html2canvas from 'html2canvas'
 import { isMathParseError, renderMathToString } from './mathRendering'
 
-const pageSize = { width: 595.28, height: 841.89 }
-const margin = 42
-const columnGap = 18
+const pageSize = { width: 612, height: 792 }
+const margin = 44.65
+const columnGap = 36
 const columnWidth = (pageSize.width - margin * 2 - columnGap) / 2
-const bodyBottom = pageSize.height - 44
+const bodyBottom = pageSize.height - 72
 
 function sanitizeFilename(title) {
   return (title || 'research-paper').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'research-paper'
@@ -87,8 +87,9 @@ function drawTable(flow, doc, element) {
   if (!allRows.length) return
   const columns = Math.max(...allRows.map((row) => row.length), 1)
   const cellWidth = columnWidth / columns
-  flow.space(3)
-  flow.writeLines(`TABLE ${element.number ?? ''} ${element.caption ?? ''}`.trim(), { size: 7.5, style: 'bold', leading: 9, color: [45, 62, 57] })
+  flow.space(2)
+  flow.writeLines(`TABLE ${element.number ?? ''}`.trim(), { size: 8, style: 'bold', leading: 8.5, color: [0, 0, 0] })
+  if (element.caption) flow.writeLines(element.caption, { size: 8, style: 'normal', leading: 9, color: [0, 0, 0] })
   allRows.forEach((row, rowIndex) => {
     doc.setFont('times', rowIndex === 0 && headers.length ? 'bold' : 'normal')
     doc.setFontSize(7)
@@ -103,7 +104,7 @@ function drawTable(flow, doc, element) {
     })
     flow.space(rowHeight)
   })
-  flow.space(5)
+  flow.space(3)
 }
 
 function drawFigure(flow, doc, element) {
@@ -124,8 +125,8 @@ function drawFigure(flow, doc, element) {
     doc.text('Figure', figureX + columnWidth / 2, flow.y() + figureHeight / 2, { align: 'center' })
   }
   flow.space(figureHeight + 4)
-  flow.writeLines(`Fig. ${element.displayNumber}. ${element.caption || 'Figure caption'}`, { size: 7.5, style: 'italic', leading: 9 })
-  flow.space(5)
+  flow.writeLines(`Fig. ${element.displayNumber}. ${element.caption || 'Figure caption'}`, { size: 8, style: 'normal', leading: 9, color: [0, 0, 0] })
+  flow.space(3)
 }
 
 function drawChart(flow, doc, element) {
@@ -158,8 +159,8 @@ function drawChart(flow, doc, element) {
     })
   }
   flow.space(height + 2)
-  flow.writeLines(`Fig. ${element.displayNumber}. ${element.caption || element.title || 'Chart'}`, { size: 7.5, style: 'italic', leading: 9 })
-  flow.space(5)
+  flow.writeLines(`Fig. ${element.displayNumber}. ${element.caption || element.title || 'Chart'}`, { size: 8, style: 'normal', leading: 9, color: [0, 0, 0] })
+  flow.space(3)
 }
 
 async function renderEquationImage(source) {
@@ -219,41 +220,55 @@ export async function exportPaperToPdf(paper) {
   const fullWidthAbstract = (paper.abstractLayout ?? 'two-columns') === 'full-width'
   doc.setTextColor(20, 29, 34)
   doc.setFont('times', 'bold')
-  doc.setFontSize(17)
+  doc.setFontSize(24)
   const titleLines = doc.splitTextToSize(paper.title || 'Untitled Research Paper', fullWidth)
   doc.text(titleLines, pageSize.width / 2, headerY, { align: 'center' })
   headerY += titleLines.length * 20 + 8
   if (authors.length) {
-    doc.setFont('times', 'normal')
-    doc.setFontSize(10)
-    const authorLines = doc.splitTextToSize(authors.map((author) => `${author.name}${author.affiliationNumbers.length ? ` ${author.affiliationNumbers.join(',')}` : ''}`).join(', '), fullWidth)
-    doc.text(authorLines, pageSize.width / 2, headerY, { align: 'center' })
-    headerY += authorLines.length * 12 + 2
+    const authorColumns = authors.length === 1 ? 1 : authors.length === 2 ? 2 : 3
+    const authorWidth = fullWidth / authorColumns
+    const authorRows = Math.ceil(authors.length / authorColumns)
+    for (let row = 0; row < authorRows; row += 1) {
+      const rowAuthors = authors.slice(row * authorColumns, (row + 1) * authorColumns)
+      rowAuthors.forEach((author, index) => {
+        const x = margin + (index + 0.5) * authorWidth
+        doc.setFont('times', 'normal')
+        doc.setFontSize(11)
+        doc.text(author.name, x, headerY, { align: 'center' })
+        const authorAffiliations = author.affiliationNumbers.map((number) => affiliations.find((affiliation) => affiliation.number === number)).filter(Boolean)
+        doc.setFont('times', 'italic')
+        doc.setFontSize(9)
+        authorAffiliations.forEach((affiliation, affiliationIndex) => doc.text(`${affiliation.number}. ${affiliation.name}`, x, headerY + 10 + affiliationIndex * 9, { align: 'center' }))
+        if (author.email.trim()) {
+          doc.setFont('times', 'normal')
+          doc.setFontSize(8)
+          doc.text(author.email, x, headerY + 10 + authorAffiliations.length * 9, { align: 'center' })
+        }
+      })
+      const rowHeight = Math.max(...rowAuthors.map((author) => {
+        const affiliationCount = author.affiliationNumbers.length
+        return 22 + affiliationCount * 9 + (author.email.trim() ? 9 : 0)
+      }))
+      headerY += rowHeight
+    }
+    headerY += 4
   }
-  if (affiliations.length) {
-    doc.setFont('times', 'italic')
-    doc.setFontSize(8.5)
-    const affiliationLines = doc.splitTextToSize(affiliations.map((affiliation) => `${affiliation.number}. ${affiliation.name}`).join('   '), fullWidth)
-    doc.text(affiliationLines, pageSize.width / 2, headerY, { align: 'center' })
-    headerY += affiliationLines.length * 11 + 8
-  }
-  doc.setDrawColor(190, 197, 193); doc.line(margin, headerY, pageSize.width - margin, headerY); headerY += 15
   if (fullWidthAbstract) {
-    headerY = writeFullWidthBlock(doc, { label: 'Abstract—', content: paper.abstract || 'No abstract has been added to this paper yet.', x: margin, y: headerY, width: fullWidth, labelWidth: 42, size: 9, leading: 10 })
+    headerY = writeFullWidthBlock(doc, { label: 'Abstract—', content: paper.abstract || 'No abstract has been added to this paper yet.', x: margin, y: headerY, width: fullWidth, labelWidth: 42, size: 9, leading: 10, labelStyle: 'italic' })
     headerY += 8
     if (keywords.length) headerY = writeFullWidthBlock(doc, { label: 'Index Terms—', content: keywords.join(', '), x: margin, y: headerY, width: fullWidth, labelWidth: 58, size: 8.2, leading: 10, labelStyle: 'bold', contentStyle: 'italic' }) + 8
   }
   const flow = createFlow(doc, headerY + 8)
   if (!fullWidthAbstract) {
-    flow.writeHeading('ABSTRACT', { size: 9.5, style: 'bold', leading: 12, color: [26, 47, 42] }, 11.5)
-    flow.writeLines(paper.abstract || 'No abstract has been added to this paper yet.', { size: 8.8, leading: 11.5 })
+    flow.writeHeading('Abstract—', { size: 9, style: 'italic', leading: 10.5, color: [0, 0, 0] }, 10.5)
+    flow.writeLines(paper.abstract || 'No abstract has been added to this paper yet.', { size: 9, leading: 10.5, color: [0, 0, 0] })
     flow.space(5)
-    if (keywords.length) { flow.writeLines(`Index Terms— ${keywords.join(', ')}`, { size: 8.2, style: 'italic', leading: 10.5 }); flow.space(5) }
+    if (keywords.length) { flow.writeLines(`Index Terms— ${keywords.join(', ')}`, { size: 8, style: 'italic', leading: 9.5, color: [0, 0, 0] }); flow.space(4) }
   }
   const numbers = getElementNumbering(paper)
   for (const { section, path } of flattenSections(paper.sections)) {
     flow.space(4)
-    flow.writeHeading(sectionHeading(section, path).toUpperCase(), { size: path.length === 1 ? 9.5 : 8.7, style: 'bold', leading: 12, color: [26, 47, 42] }, 11.5)
+    flow.writeHeading(path.length === 1 ? sectionHeading(section, path).toUpperCase() : sectionHeading(section, path), { size: path.length === 1 ? 10 : 9, style: path.length === 1 ? 'bold' : 'italic', leading: 11.5, color: [0, 0, 0] }, 10.5)
     flow.space(2)
     for (const element of sectionElements(section)) {
       const displayNumber = numbers[element.id]?.value
@@ -265,7 +280,7 @@ export async function exportPaperToPdf(paper) {
       else if (element.type === 'quote') { flow.writeLines(`“${element.content ?? ''}”${element.source ? ` — ${element.source}` : ''}`, { size: 8.5, style: 'italic', leading: 11.5, indent: 10 }); flow.space(5) }
       else if (element.type === 'code') { flow.writeLines(element.content ?? '', { size: 7.5, leading: 9, indent: 8 }); flow.space(5) }
       else if (element.type === 'heading') { flow.writeLines(element.content ?? '', { size: 8.7, style: 'bold', leading: 12 }); flow.space(3) }
-      else { flow.writeLines(element.content ?? '', { size: 8.8, leading: 11.5 }); flow.space(5) }
+      else { flow.writeLines(element.content ?? '', { size: 10, leading: 11.4, color: [0, 0, 0], indent: 14.4 }); flow.space(4) }
     }
   }
   if (paper.references.length) {
